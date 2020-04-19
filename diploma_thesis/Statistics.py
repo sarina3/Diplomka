@@ -30,6 +30,9 @@ class Statistics():
 
     def mean(self,stat_name, part_mean = False, len_o_subset = None):
         if part_mean:
+            if len_o_subset > len(getattr(self,stat_name)):
+                part_mean = False
+        if part_mean:
             assert len_o_subset is not None, 'len_o_subset cant be None when part_mean is true'
             return sum(getattr(self,stat_name)[-len_o_subset:])/len_o_subset
         else:
