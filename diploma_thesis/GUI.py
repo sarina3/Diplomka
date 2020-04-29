@@ -5,7 +5,7 @@ from PyQt5.QtCore import QThread, pyqtSignal,Qt
 from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
         QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
         QProgressBar, QPushButton, QRadioButton, QButtonGroup, QScrollBar, QSizePolicy,
-        QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QTextEdit)
+        QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QWidget, QTextEdit)
 from Agent import Agent
 import threading as th
 from multiprocessing import Pipe
@@ -18,9 +18,11 @@ class myApplication(QDialog):
         self.group_layout = None
         self.create_controls()
         self.create_charts()
-
-        self.mainLayout = QGridLayout()
-        self.mainLayout.addWidget(self.controlGroup,0,0)
+        self.tabs = QTabWidget()
+        self.main_tab = QWidget()
+        self.results_tab = QWidget()
+        self.application_layout = QGridLayout()
+        self.application_layout.addWidget(self.controlGroup,0,0)
         self.graphGroup = QGroupBox('Graphs')
         layout = QGridLayout()
         layout.addWidget(self.actual_score_chart,0,0)
@@ -31,10 +33,14 @@ class myApplication(QDialog):
         layout.addWidget(self.egreedy_chart,1,2)
         self.graphGroup.setLayout(layout)
         self.graphGroup.setEnabled(False)
-        self.mainLayout.addWidget(self.graphGroup,0,1)
+        self.application_layout.addWidget(self.graphGroup,0,1)
         self.create_progress_bar()
-        self.setLayout(self.mainLayout)
-
+        self.main_tab.setLayout(self.application_layout)
+        self.tabs.addTab(self.main_tab, 'Application')
+        self.tabs.addTab(self.results_tab, 'Results displayer')
+        self.main_layout = QGridLayout()
+        self.main_layout.addWidget(self.tabs)
+        self.setLayout(self.main_layout)
         self.setWindowTitle('Diplomova praca Jakub Sarina')
         self.resize(1900,960)
         self.show()
@@ -73,6 +79,7 @@ class myApplication(QDialog):
         config['load_weights_enabled'] = self.load_weights_enabled.isChecked()
         config['save_weights_enabled'] = self.save_weights_enabled.isChecked()
         config['variable_updating_enabled'] = self.variable_updating_enabled.isChecked()
+        config['stats_output_file'] = self.save_data_filename.text()
         if self.load_weights_enabled.isChecked() == True:
             config['load_weights_filename'] = self.load_weights_filename.text()
         if self.rendering_enabled.isChecked() == True:
@@ -84,7 +91,7 @@ class myApplication(QDialog):
             config['update_target_frequency_base'] = int(self.update_target_frequency_base.text())
             config['update_target_frequency_multiplicator'] = float(self.update_target_frequency_multiplicator.text())
             config['update_target_frequency_limit'] = int(self.update_target_frequency_limit.text())
-
+        self.score_avg_report.setTitle('Average score last '+self.report_interval.text()+' episodes')
         self.stop.setDisabled(False)
         self.deamon = RefreshDeamon(config)
         self.deamon.signal.connect(self.callback)
@@ -116,7 +123,7 @@ class myApplication(QDialog):
         self.progress_bar_layout.addWidget(self.frames_label, 1,1)
         self.progress_bar_layout.addWidget(self.memory_level_label, 1,2)
         self.progress_bar_layout.addWidget(self.is_solved_label, 1,3)
-        self.mainLayout.addLayout(self.progress_bar_layout,1,0,1,-1)
+        self.application_layout.addLayout(self.progress_bar_layout,1,0,1,-1)
         self.progress_bar_layout.setEnabled(False)
 
     def reset_progress_bar(self):
@@ -175,7 +182,7 @@ class myApplication(QDialog):
         self.dueling.setChecked(False)
         self.rendering_enabled = QCheckBox('Enable rendering')
         self.rendering_enabled.setChecked(False)
-        self.variable_updating_enabled = QCheckBox('Enable variable target updatig:')
+        self.variable_updating_enabled = QCheckBox('Enable variable target updating:')
         self.variable_updating_enabled.setChecked(False)
         self.variable_updating_enabled.stateChanged.connect(self.variable_updating_changed)
         self.rendering_enabled.stateChanged.connect(self.rendering_changed)
@@ -184,6 +191,8 @@ class myApplication(QDialog):
         self.load_weights_enabled.stateChanged.connect(self.load_weights_changed)
         self.save_weights_enabled = QCheckBox('Enable saving weights')
         self.save_weights_enabled.setChecked(False)
+        self.save_data_filename_label = QLabel('Data storage filename')
+        self.save_data_filename = QLineEdit('Data_output.txt')
         self.save_weights_enabled.stateChanged.connect(self.save_weights_changed)
         self.create_control_layout()
 
@@ -216,24 +225,26 @@ class myApplication(QDialog):
         layout.addWidget(self.batch_size, 12, 1)
         layout.addWidget(self.update_target_frequency_label, 13, 0)
         layout.addWidget(self.update_target_frequency, 13, 1)
-        layout.addWidget(self.clip_err, 14, 0)
-        layout.addWidget(self.DQN, 15, 0)
-        layout.addWidget(self.double_DQN, 15, 1)
-        layout.addWidget(self.dueling, 16, 0)
-        layout.addWidget(self.rendering_enabled, 17, 0)
-        layout.addWidget(self.variable_updating_enabled, 19, 0)
-        layout.addWidget(self.save_weights_enabled, 21, 0)
-        layout.addWidget(self.load_weights_enabled, 23, 0)
+        layout.addWidget(self.save_data_filename_label, 14, 0)
+        layout.addWidget(self.save_data_filename, 14, 1)
+        layout.addWidget(self.clip_err, 15, 0)
+        layout.addWidget(self.DQN, 16, 0)
+        layout.addWidget(self.double_DQN, 16, 1)
+        layout.addWidget(self.dueling, 17, 0)
+        layout.addWidget(self.rendering_enabled, 18, 0)
+        layout.addWidget(self.variable_updating_enabled, 20, 0)
+        layout.addWidget(self.save_weights_enabled, 22, 0)
+        layout.addWidget(self.load_weights_enabled, 24, 0)
         self.save_layout = QGridLayout()
         self.rendering_layout = QGridLayout()
         self.load_layout = QGridLayout()
         self.variable_updating_layout = QGridLayout()
-        layout.addLayout(self.save_layout, 22, 0, 1, -1)
-        layout.addLayout(self.load_layout, 24, 0, 1, -1)
-        layout.addLayout(self.rendering_layout, 18, 0, 1, -1)
-        layout.addLayout(self.variable_updating_layout, 20, 0, 1, -1)
+        layout.addLayout(self.save_layout, 23, 0, 1, -1)
+        layout.addLayout(self.load_layout, 25, 0, 1, -1)
+        layout.addLayout(self.rendering_layout, 19, 0, 1, -1)
+        layout.addLayout(self.variable_updating_layout, 21, 0, 1, -1)
         self.create_buttons()
-        layout.addLayout(self.button_layout,25,0,1,-1)
+        layout.addLayout(self.button_layout,26,0,1,-1)
         self.group_layout = layout
         self.controlGroup.setLayout(self.group_layout)
 

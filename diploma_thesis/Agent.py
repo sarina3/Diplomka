@@ -50,6 +50,7 @@ class Agent():
         self.num_o_output = self.env.action_space.n
         self.NN = NeuralNetwork(self.num_o_input,self.num_o_output,self.config).to(self.device)
         self.targetNN = NeuralNetwork(self.num_o_input,self.num_o_output,self.config).to(self.device)
+        self.stats_output_file = config['stats_output_file']
         if self.config['load_weights_enabled']:
             self.NN.load_state_dict(torch.load(self.config['load_weights_filename']))
             self.targetNN.load_state_dict(torch.load(self.config['load_weights_filename']))
@@ -67,10 +68,12 @@ class Agent():
 
         if config['variable_updating_enabled']:
             self.update_frequency = config['update_target_frequency_base']
+            self.update_frequency_float = config['update_target_frequency_base']
             self.update_frequency_multiplicator = config['update_target_frequency_multiplicator']
             self.update_frequency_limit = config['update_target_frequency_limit']
         else:
             self.update_frequency = config['update_target_frequency']
+        self.statistics.add('update_target_frequency', self.update_frequency, True)
 
 
     def get_action(self,state):
@@ -121,7 +124,9 @@ class Agent():
             self.targetNN.load_state_dict(self.NN.state_dict())
             if self.config['variable_updating_enabled']:
                 if self.update_frequency <= self.update_frequency_limit:
-                    self.update_frequency *= self.update_frequency_multiplicator
+                    self.update_frequency_float *= self.update_frequency_multiplicator
+                    self.update_frequency = int(self.update_frequency_float)
+            self.statistics.add('update_target_frequency', self.update_frequency, True)
         self.update_target_counter += 1
 
     def play(self):
@@ -135,6 +140,7 @@ class Agent():
             while True:
                 if self.pipe_in.poll() == True:
                     print('im done')
+                    self.save_stats()
                     return
 
                 step += 1
@@ -165,7 +171,7 @@ class Agent():
                             torch.save(self.NN.state_dict(), self.config['save_weights_filename'])
                     mean_reward_last_100 = self.statistics.mean('score_total',True,100)
 
-                    if mean_reward_last_100 > self.config['score_to_achieve']:
+                    if mean_reward_last_100 > self.config['score_to_achieve'] or self.statistics.get('solved') == True:
                         print('solved after %i episodes' % self.statistics.get('solved_after'))
                         if self.statistics.get('solved') == False:
                             self.statistics.set('solved', True)
@@ -174,6 +180,7 @@ class Agent():
                     self.send_update()
                     print('episode finished after %i steps' % step)
                     break
+        self.save_stats()
 
 
     def send_update(self):
@@ -189,3 +196,6 @@ class Agent():
               self.statistics.get('solved'))
         self.pipe_in.send(tmp)
 
+    def save_stats(self):
+        with open(self.stats_output_file, 'w') as file:
+            file.write(self.statistics.to_json())

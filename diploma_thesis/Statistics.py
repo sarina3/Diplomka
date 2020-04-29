@@ -1,4 +1,4 @@
-
+import json
 class Statistics():
     def __init__(self):
         self.solved_after = 0
@@ -8,6 +8,7 @@ class Statistics():
         self.score_total = []
         self.episode = 0
         self.egreedy = 0
+        self.update_target_frequency = []
 
     def reset(self, hard):
         if hard:
@@ -18,9 +19,11 @@ class Statistics():
             self.solved = False
             self.steps_total = []
             self.score_total = []
+            self.update_target_frequency = []
         else:
             self.steps_total = []
             self.score_total = []
+            self.update_target_frequency = []
 
     def add(self, stat_name, value, continous):
         if continous:
@@ -60,3 +63,16 @@ class Statistics():
                               self.score_total[-1]
                           )
             )
+
+    def to_json(self):
+        result = {
+            'solved_after': self.solved_after,
+            'frames_total': self.frames_total,
+            'solved': self.solved,
+            'steps_total': self.steps_total,
+            'score_total': self.score_total,
+            'episode': self.episode,
+            'egreedy': self.egreedy,
+            'update_target_frequency': self.update_target_frequency
+        }
+        return json.dumps(result)
