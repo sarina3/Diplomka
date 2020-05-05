@@ -5,7 +5,6 @@ import torch.optim as opt
 from Neural_network import NeuralNetwork
 from Memory import ExperienceReplay
 from Statistics import Statistics
-# from config import *
 import random
 import gym
 
@@ -34,7 +33,7 @@ import os
 # weights_saving_frequency = 100
 # dueling = True
 
-class Agent():
+class Agent(object):
     def __init__(self,config,pipe_in):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         print(config)

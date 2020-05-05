@@ -1,26 +1,28 @@
 import pyqtgraph as pg
-import random
 from PyQt5.QtCore import QThread, pyqtSignal,Qt
 
-from PyQt5.QtWidgets import (QApplication, QCheckBox, QComboBox, QDateTimeEdit,
-        QDial, QDialog, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-        QProgressBar, QPushButton, QRadioButton, QButtonGroup, QScrollBar, QSizePolicy,
-        QSlider, QSpinBox, QStyleFactory, QTableWidget, QTabWidget, QWidget, QTextEdit)
-from Agent import Agent
+from PyQt5.QtWidgets import (QApplication, QCheckBox,
+        QDialog, QGridLayout, QGroupBox,  QLabel, QLineEdit,
+        QProgressBar, QPushButton, QRadioButton, QButtonGroup, QTabWidget, QWidget, QFileDialog, QVBoxLayout, QHBoxLayout, QScrollArea)
+import Agent
 import threading as th
+import pkg_resources
 from multiprocessing import Pipe
+import logging
+import json
 import os
 
 class myApplication(QDialog):
     def __init__(self, parent = None):
         super(myApplication,self).__init__(parent)
-        self.pallete = QApplication.palette()
+        self.pallete = QApplication.palette(self)
         self.group_layout = None
         self.create_controls()
         self.create_charts()
         self.tabs = QTabWidget()
         self.main_tab = QWidget()
         self.results_tab = QWidget()
+        self.create_displayer()
         self.application_layout = QGridLayout()
         self.application_layout.addWidget(self.controlGroup,0,0)
         self.graphGroup = QGroupBox('Graphs')
@@ -527,6 +529,216 @@ class myApplication(QDialog):
         self.update_steps(int(parsed[5]))
         self.update_progress_bar_layout(parsed[6],parsed[7],parsed[8],parsed[9],parsed[3])
 
+    def create_displayer(self):
+        self.display_controls = QGroupBox('Controls')
+        self.display_controls_layout = QVBoxLayout()
+        self.display_controls_layout.setAlignment(Qt.AlignTop)
+        self.file_picker_button = QPushButton('Select file')
+        self.file_picker_button.clicked.connect(self.on_file_pick)
+        self.display_controls_layout.addWidget(self.file_picker_button,1)
+        widget = QWidget()
+        scroll = QScrollArea()
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        widget.setLayout(self.display_controls_layout)
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(scroll)
+        self.display_controls.setLayout(group_layout)
+        self.display_graph_group = QGroupBox('Chart')
+        self.display_graph_layout = QVBoxLayout()
+        self.display_graph_group.setLayout(self.display_graph_layout)
+        self.create_displayer_graph_layout()
+        self.display_layout = QHBoxLayout()
+        self.display_layout.addWidget(self.display_controls, 1)
+        self.display_layout.addWidget(self.display_graph_group,4)
+        self.results_tab.setLayout(self.display_layout)
+        self.displayer_data = []
+
+    def on_file_pick(self):
+        filename = QFileDialog.getOpenFileName(directory=str(os.path.abspath(os.getcwd())))
+        with open(filename[0], 'r') as f:
+            self.displayer_data.append(json.load(f))
+            self.after_file_pick(filename[0])
+
+    def after_file_pick(self, filename):
+        layout = QGridLayout()
+        index_database = len(self.displayer_data) - 1
+        index = 0
+        for field in self.displayer_data[-1]:
+            label = QLabel(field + ': ')
+            if type(self.displayer_data[-1][field]) == list:
+                data = QPushButton('Display in chart')
+                data.clicked.connect(lambda x, y = field: self.on_display_in_chart(index_database, y))
+                layout.addWidget(label, index, 0)
+                layout.addWidget(data, index, 1)
+            else:
+                data = QLabel(str(self.displayer_data[-1][field]))
+                layout.addWidget(label, index, 0)
+                layout.addWidget(data, index, 1)
+            index += 1
+        close = QPushButton('Close file')
+        close.clicked.connect(lambda: self.on_close(index_database))
+        mean = QPushButton('create mean row')
+        mean.clicked.connect(self.on_create_modal)
+        layout.addWidget(close,100,0)
+        layout.addWidget(mean,100,1)
+        group = QGroupBox(str(index_database))
+        group.setLayout(layout)
+        group.setFixedHeight(250)
+        self.display_controls_layout.addWidget(group,0)
+
+    def on_display_in_chart(self,index,field):
+        colors= ['r','g','b','y','w']
+        data = self.displayer_data[index][field]
+        if(self.color_index == len(colors)):
+            return
+        self.displayer_chart_y = data
+        if self.chart_type == 'LINE':
+            indexes = [i for i in range(len(data))]
+            self.displayer_chart_x = indexes
+
+            self.displayer_chart.clearMouse()
+            self.displayer_chart_data = self.displayer_chart.plot(self.displayer_chart_x, self.displayer_chart_y, name=field, pen=pg.mkPen(colors[self.color_index], width=1))
+        else:
+            indexes = [i + self.color_index * 0.1 for i in range(len(data))]
+            self.displayer_chart_x = indexes
+            data = pg.BarGraphItem(x=self.displayer_chart_x, height=self.displayer_chart_y, name=field , width=0.2, brush=colors[self.color_index])
+            self.displayer_chart.addItem(data)
+        self.color_index += 1
+            # def plot(self, x, y, plotname, color):
+            #     pen = pg.mkPen(color=color)
+            #     self.graphWidget.plot(x, y, name=plotname, pen=pen, symbol='+', symbolSize=30, symbolBrush=(color))
+
+    def on_create_modal(self, data_index):
+        self.dialog = QDialog(self)
+        layout = QGridLayout()
+        subset_label = QLabel('subset length: ')
+        subset = QLineEdit('-1')
+        hint = QLabel('-1 stands for all data if continous enabled mean will be computed for every x entries if static is selected mean will be computed from last x entries')
+        continuous = QCheckBox('Continuous')
+        continuous.setChecked(True)
+        layout.addWidget(continuous,0,0)
+        layout.addWidget(subset_label,1,0)
+        layout.addWidget(subset,1,1)
+        layout.addWidget(hint,2,0,0,-1)
+        name_label = QLabel('row name: ')
+        name = QLineEdit()
+        layout.addWidget(name_label,3,0)
+        layout.addWidget(name,3,1)
+        index = 4
+        for field in self.displayer_data[-1]:
+            if type(self.displayer_data[-1][field]) == list:
+                label = QLabel(field + ': ')
+                data = QPushButton('Select this row')
+                data.clicked.connect(lambda x, y=field:self.create_mean_row(continuous.isChecked(),data_index,int(subset.text()),name.text(),y))
+                layout.addWidget(label, index, 0)
+                layout.addWidget(data, index, 1)
+                index += 1
+        self.dialog.setLayout(layout)
+        self.dialog.exec()
+
+    def create_mean_row(self,contunous,data_index,subset,row_name,origin_row_name):
+        index = len(self.displayer_data[data_index])
+        if contunous:
+            data = []
+            if subset != -1:
+                for i in range(subset,len(self.displayer_data[data_index][origin_row_name])):
+                    data.append(self.mean(self.displayer_data[data_index][origin_row_name][i-subset:i]))
+            else:
+                for i in range(1,len(self.displayer_data[data_index][origin_row_name])):
+                    data.append(self.mean(self.displayer_data[data_index][origin_row_name][:i]))
+            self.displayer_data[data_index][row_name] = data
+            label = QLabel(row_name+': ')
+            btn= QPushButton('Display in chart')
+            btn.clicked.connect(lambda x, y = row_name: self.on_display_in_chart(data_index, y))
+            self.display_controls_layout.itemAt(data_index+1).widget().layout().addWidget(label,index,0)
+            self.display_controls_layout.itemAt(data_index+1).widget().layout().addWidget(btn,index,1)
+        else:
+            if subset == -1:
+                mean = self.mean(self.displayer_data[data_index][origin_row_name])
+            else:
+                mean = self.mean(self.displayer_data[data_index][origin_row_name][-subset:])
+            label = QLabel(row_name+': ')
+            data = QLabel('{0:.2f}'.format(mean))
+            self.display_controls_layout.itemAt(data_index + 1).widget().layout().addWidget(label, index, 0)
+            self.display_controls_layout.itemAt(data_index + 1).widget().layout().addWidget(data, index, 1)
+        self.dialog.close()
+
+
+    def mean(self,data):
+        return sum(data)/len(data)
+
+    def on_close(self,index):
+        widget = self.display_controls_layout.itemAt(index + 1)
+        widget.widget().hide()
+        self.display_controls_layout.removeWidget(widget.widget())
+        self.displayer_data.pop(index)
+
+    def create_displayer_graph_layout(self):
+        self.displayer_chart_top_layout = QVBoxLayout()
+        chart_widget = QWidget()
+        chart_widget.setLayout(self.displayer_chart_top_layout)
+        self.display_graph_layout.addWidget(chart_widget,5)
+        self.create_chart_displayer(False)
+        self.bar = QRadioButton('bar char')
+        self.bar.setChecked(False)
+        self.bar.clicked.connect(lambda: self.create_chart_displayer(True))
+        self.line = QRadioButton('line chart')
+        self.line.setChecked(True)
+        self.line.clicked.connect(lambda :self.create_chart_displayer(False))
+        chart_title_label = QLabel('Chart title:')
+        chart_title = QLineEdit()
+        chart_title.textChanged.connect(lambda : self.displayer_chart.setTitle(chart_title.text()))
+        x_axis_title_label = QLabel('X axis title:')
+        x_axis_title = QLineEdit()
+        x_axis_title.textChanged.connect(lambda : self.displayer_chart.setLabel('bottom',x_axis_title.text()))
+        y_axis_title_label = QLabel('Y axis title:')
+        y_axis_title = QLineEdit()
+        y_axis_title.textChanged.connect(lambda : self.displayer_chart.setLabel('left',y_axis_title.text()))
+        clear_plot = QPushButton('Clear plot')
+        clear_plot.clicked.connect(lambda: self.create_chart_displayer(self.chart_type == 'BAR'))
+        export_plot = QPushButton('Export plot')
+        layout = QGridLayout()
+        layout.addWidget(self.bar,0,0,1,1)
+        layout.addWidget(self.line,0,1,1,-1)
+        layout.addWidget(chart_title_label,1,0,1,1)
+        layout.addWidget(chart_title,1,1,1,1)
+        layout.addWidget(x_axis_title_label,1,2,1,1)
+        layout.addWidget(x_axis_title,1,3,1,1)
+        layout.addWidget(y_axis_title_label,1,4,1,1)
+        layout.addWidget(y_axis_title,1,5,1,1)
+        layout.addWidget(clear_plot, 2,1)
+        layout.addWidget(export_plot, 2,3)
+        chart_control_widget = QWidget()
+        chart_control_widget.setLayout(layout)
+        self.display_graph_layout.addWidget(chart_control_widget,2)
+
+    def create_chart_displayer(self,bar):
+        self.displayer_chart = pg.PlotWidget()
+
+        self.color_index = 0
+        if bar:
+            self.displayer_chart_x = []
+            self.displayer_chart_y = []
+            self.displayer_chart_data = pg.BarGraphItem(x=self.displayer_chart_x, height=self.displayer_chart_y, width=1, brush='b')
+            self.displayer_chart.addItem(self.displayer_chart_data)
+            self.chart_type = 'BAR'
+        else:
+            self.displayer_chart.addLegend()
+            self.displayer_chart_x = []
+            self.displayer_chart_y = []
+            self.displayer_chart_data = self.displayer_chart.plot(self.displayer_chart_x, self.displayer_chart_y)
+            self.chart_type = 'LINE'
+        for i in range(self.displayer_chart_top_layout.count()):
+            tmp = self.displayer_chart_top_layout.itemAt(0).widget()
+            tmp.hide()
+            self.displayer_chart_top_layout.removeWidget(tmp)
+        self.displayer_chart_top_layout.addWidget(self.displayer_chart)
+
+
+
+
 
 class RefreshDeamon(QThread):
     signal = pyqtSignal(object)
@@ -534,7 +746,7 @@ class RefreshDeamon(QThread):
     def __init__(self, config):
         QThread.__init__(self)
         self.pipe_out, pipe_in = Pipe()
-        self.agent = Agent(config, pipe_in)
+        self.agent = Agent.Agent(config, pipe_in)
         self.listening = False
         self.thread = th.Thread(target=self.agent.play,)
 
@@ -551,10 +763,13 @@ class RefreshDeamon(QThread):
         self.thread.join()
         self.quit()
 
-import sys
-app = QApplication(sys.argv)
-myApp = myApplication()
-myApplication.show(myApp)
-sys.exit(app.exec_())
-
-
+if __name__ == "__main__":
+    import sys
+    logging.basicConfig(filename='log.txt', level=logging.DEBUG)
+    try:
+        app = QApplication(sys.argv)
+        myApp = myApplication()
+        myApplication.show(myApp)
+        sys.exit(app.exec_())
+    except Exception as e:
+        logging.error(e,exc_info=True)
