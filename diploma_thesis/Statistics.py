@@ -1,4 +1,5 @@
 import json
+import time
 class Statistics():
     def __init__(self):
         self.solved_after = 0
@@ -9,7 +10,8 @@ class Statistics():
         self.episode = 0
         self.egreedy = 0
         self.update_target_frequency = []
-
+        self.time = 0
+        self.solved_time = 0
     def reset(self, hard):
         if hard:
             self.solved_after = 0
@@ -20,6 +22,8 @@ class Statistics():
             self.steps_total = []
             self.score_total = []
             self.update_target_frequency = []
+            self.time = 0
+            self.solved_time = 0
         else:
             self.steps_total = []
             self.score_total = []
@@ -73,6 +77,9 @@ class Statistics():
             'score_total': self.score_total,
             'episode': self.episode,
             'egreedy': self.egreedy,
-            'update_target_frequency': self.update_target_frequency
+            'update_target_frequency': self.update_target_frequency,
+            'run_time:': self.time - time.time(),
+            'start_time': self.time,
+            'solved_time': self.solved_time,
         }
         return json.dumps(result)

@@ -1,4 +1,6 @@
 import pyqtgraph as pg
+import pyqtgraph.exporters
+
 from PyQt5.QtCore import QThread, pyqtSignal,Qt
 
 from PyQt5.QtWidgets import (QApplication, QCheckBox,
@@ -118,18 +120,21 @@ class myApplication(QDialog):
         self.progress_bar_layout = QGridLayout()
         self.progress_bar_layout.addWidget(self.progress_bar, 0, 0, 1, -1)
         self.episode_label = QLabel()
+        self.run_time_label = QLabel()
         self.frames_label = QLabel()
         self.memory_level_label = QLabel()
         self.is_solved_label = QLabel()
         self.progress_bar_layout.addWidget(self.episode_label, 1,0)
-        self.progress_bar_layout.addWidget(self.frames_label, 1,1)
-        self.progress_bar_layout.addWidget(self.memory_level_label, 1,2)
-        self.progress_bar_layout.addWidget(self.is_solved_label, 1,3)
+        self.progress_bar_layout.addWidget(self.run_time_label,1,1)
+        self.progress_bar_layout.addWidget(self.frames_label, 1,2)
+        self.progress_bar_layout.addWidget(self.memory_level_label, 1,3)
+        self.progress_bar_layout.addWidget(self.is_solved_label, 1,4)
         self.application_layout.addLayout(self.progress_bar_layout,1,0,1,-1)
         self.progress_bar_layout.setEnabled(False)
 
     def reset_progress_bar(self):
         self.episode_label.setText('Episode: 0/' + self.num_o_ep.text())
+        self.run_time_label.setText('Run time: 0 s')
         self.frames_label.setText('Frames total: 0')
         self.memory_level_label.setText('Replay memory filling level: 0/' + self.memory_size.text())
         self.is_solved_label.setText('Solved: False')
@@ -138,6 +143,7 @@ class myApplication(QDialog):
 
     def update_progress_bar_layout(self,episode,frames_total,memory_level,solved,score):
         self.episode_label.setText('Episode: {}/{}'.format(episode, self.num_o_ep.text()))
+        self.run_time_label.setText('Run Time')
         self.frames_label.setText('Frames total: ' + frames_total)
         self.memory_level_label.setText('Replay memory filling level: {}/{}'.format(memory_level, self.memory_size.text()))
         self.is_solved_label.setText('Solved: ' + solved)
@@ -580,7 +586,7 @@ class myApplication(QDialog):
         close = QPushButton('Close file')
         close.clicked.connect(lambda: self.on_close(index_database))
         mean = QPushButton('create mean row')
-        mean.clicked.connect(self.on_create_modal)
+        mean.clicked.connect(lambda: self.on_create_modal(index_database))
         layout.addWidget(close,100,0)
         layout.addWidget(mean,100,1)
         group = QGroupBox(str(index_database))
@@ -643,8 +649,11 @@ class myApplication(QDialog):
         if contunous:
             data = []
             if subset != -1:
-                for i in range(subset,len(self.displayer_data[data_index][origin_row_name])):
-                    data.append(self.mean(self.displayer_data[data_index][origin_row_name][i-subset:i]))
+                for i in range(1,len(self.displayer_data[data_index][origin_row_name])):
+                    if i <= subset:
+                        data.append(self.mean(self.displayer_data[data_index][origin_row_name][0:i]))
+                    else:
+                        data.append(self.mean(self.displayer_data[data_index][origin_row_name][i-subset:i]))
             else:
                 for i in range(1,len(self.displayer_data[data_index][origin_row_name])):
                     data.append(self.mean(self.displayer_data[data_index][origin_row_name][:i]))
@@ -663,6 +672,7 @@ class myApplication(QDialog):
             data = QLabel('{0:.2f}'.format(mean))
             self.display_controls_layout.itemAt(data_index + 1).widget().layout().addWidget(label, index, 0)
             self.display_controls_layout.itemAt(data_index + 1).widget().layout().addWidget(data, index, 1)
+        self.display_controls_layout.itemAt(data_index + 1).widget().setFixedHeight((self.display_controls_layout.itemAt(data_index + 1).widget().layout().count()/2) * 30)
         self.dialog.close()
 
 
@@ -688,8 +698,8 @@ class myApplication(QDialog):
         self.line.setChecked(True)
         self.line.clicked.connect(lambda :self.create_chart_displayer(False))
         chart_title_label = QLabel('Chart title:')
-        chart_title = QLineEdit()
-        chart_title.textChanged.connect(lambda : self.displayer_chart.setTitle(chart_title.text()))
+        self.chart_title = QLineEdit()
+        self.chart_title.textChanged.connect(lambda : self.displayer_chart.setTitle(self.chart_title.text()))
         x_axis_title_label = QLabel('X axis title:')
         x_axis_title = QLineEdit()
         x_axis_title.textChanged.connect(lambda : self.displayer_chart.setLabel('bottom',x_axis_title.text()))
@@ -699,11 +709,13 @@ class myApplication(QDialog):
         clear_plot = QPushButton('Clear plot')
         clear_plot.clicked.connect(lambda: self.create_chart_displayer(self.chart_type == 'BAR'))
         export_plot = QPushButton('Export plot')
+        export_plot.clicked.connect(lambda: self.export_plot())
+
         layout = QGridLayout()
         layout.addWidget(self.bar,0,0,1,1)
         layout.addWidget(self.line,0,1,1,-1)
         layout.addWidget(chart_title_label,1,0,1,1)
-        layout.addWidget(chart_title,1,1,1,1)
+        layout.addWidget(self.chart_title,1,1,1,1)
         layout.addWidget(x_axis_title_label,1,2,1,1)
         layout.addWidget(x_axis_title,1,3,1,1)
         layout.addWidget(y_axis_title_label,1,4,1,1)
@@ -714,9 +726,15 @@ class myApplication(QDialog):
         chart_control_widget.setLayout(layout)
         self.display_graph_layout.addWidget(chart_control_widget,2)
 
+    def export_plot(self):
+        exporter = pg.exporters.ImageExporter(self.displayer_chart.plotItem)
+        exporter.params.param('width').setValue(960, blockSignal=exporter.widthChanged)
+        exporter.params.param('height').setValue(400, blockSignal=exporter.heightChanged)
+        exporter.export('export.png')
+
+
     def create_chart_displayer(self,bar):
         self.displayer_chart = pg.PlotWidget()
-
         self.color_index = 0
         if bar:
             self.displayer_chart_x = []
@@ -735,9 +753,6 @@ class myApplication(QDialog):
             tmp.hide()
             self.displayer_chart_top_layout.removeWidget(tmp)
         self.displayer_chart_top_layout.addWidget(self.displayer_chart)
-
-
-
 
 
 class RefreshDeamon(QThread):

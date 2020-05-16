@@ -7,8 +7,7 @@ from Memory import ExperienceReplay
 from Statistics import Statistics
 import random
 import gym
-
-import os
+import time
 
 # learn_rate = 0.001
 # num_o_ep = 20000
@@ -38,6 +37,7 @@ class Agent(object):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         print(config)
         seed = 23
+
         self.env = gym.make('LunarLander-v2')
         self.env.seed(seed)
         random.seed(seed)
@@ -175,6 +175,7 @@ class Agent(object):
                         if self.statistics.get('solved') == False:
                             self.statistics.set('solved', True)
                             self.statistics.set('solved_after', episode)
+                            self.statistics.set('solved_time', time.time())
                     self.statistics.string_report(self.config['report_interval'])
                     self.send_update()
                     print('episode finished after %i steps' % step)
@@ -183,7 +184,7 @@ class Agent(object):
 
 
     def send_update(self):
-        tmp = '{0:.2f},{1:.2f},{2:.2f},{3:.2f},{4:.2f},{5:d},{6:d},{7:d},{8:d},{9}'.format(self.statistics.get('egreedy'),
+        tmp = '{0:.2f},{1:.2f},{2:.2f},{3:.2f},{4:.2f},{5:d},{6:d},{7:d},{8:d},{9}, {10:.2f}'.format(self.statistics.get('egreedy'),
               self.statistics.get('score_total')[-1],
               self.statistics.mean('score_total'),
               self.statistics.mean('score_total',True,100),
@@ -192,7 +193,8 @@ class Agent(object):
               self.statistics.get('episode'),
               self.statistics.get('frames_total'),
               len(self.memory),
-              self.statistics.get('solved'))
+              self.statistics.get('solved'),
+              (self.statistics.get('time') - time.time()))
         self.pipe_in.send(tmp)
 
     def save_stats(self):
