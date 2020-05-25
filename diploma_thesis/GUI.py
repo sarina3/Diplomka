@@ -8,15 +8,15 @@ from PyQt5.QtWidgets import (QApplication, QCheckBox,
         QProgressBar, QPushButton, QRadioButton, QButtonGroup, QTabWidget, QWidget, QFileDialog, QVBoxLayout, QHBoxLayout, QScrollArea)
 import Agent
 import threading as th
-import pkg_resources
 from multiprocessing import Pipe
-import logging
 import json
 import os
 
+
+
 class myApplication(QDialog):
     def __init__(self, parent = None):
-        super(myApplication,self).__init__(parent)
+        super(myApplication,self).__init__()
         self.pallete = QApplication.palette(self)
         self.group_layout = None
         self.create_controls()
@@ -70,7 +70,10 @@ class myApplication(QDialog):
         config['egreedy_final'] = float(self.egreedy_final.text())
         config['score_to_achieve'] = int(self.score_to_achieve.text())
         config['report_interval'] = int(self.report_interval.text())
-        config['number_o_hidden_layers'] = int(self.number_o_hidden_layers.text())
+        if self.number_o_hidden_layers.text() != None or self.number_o_hidden_layers.text() != '':
+            config['number_o_hidden_layers'] = int(self.number_o_hidden_layers.text())
+        else:
+            config['number_o_hidden_layers'] = 0
         config['hidden_layers'] = [int(i.text()) for i in self.hidden_layers]
         config['memory_size'] = int(self.memory_size.text())
         config['batch_size'] = int(self.batch_size.text())
@@ -84,6 +87,7 @@ class myApplication(QDialog):
         config['save_weights_enabled'] = self.save_weights_enabled.isChecked()
         config['variable_updating_enabled'] = self.variable_updating_enabled.isChecked()
         config['stats_output_file'] = self.save_data_filename.text()
+        config['use_static'] = self.use_static.isChecked()
         if self.load_weights_enabled.isChecked() == True:
             config['load_weights_filename'] = self.load_weights_filename.text()
         if self.rendering_enabled.isChecked() == True:
@@ -169,8 +173,10 @@ class myApplication(QDialog):
         self.report_interval_label = QLabel('Report interval:')
         self.number_o_hidden_layers = QLineEdit('2')
         self.number_o_layers_label = QLabel('Number of hidden layers:')
+        self.use_static = QCheckBox('Use static model')
+        self.use_static.stateChanged.connect(lambda x: self.use_static_model(self.use_static.isChecked()))
         self.hidden_layers = []
-        self.number_o_hidden_layers.textChanged.connect(self.create_network_controls)
+        self.number_o_hidden_layers.textChanged.connect(lambda x: self.create_network_controls(int(self.number_o_hidden_layers.text()) if self.number_o_hidden_layers.text() != '' else 0))
         self.memory_size = QLineEdit('600000')
         self.memory_size_label = QLabel('Replay memory size:')
         self.batch_size = QLineEdit('64')
@@ -204,6 +210,11 @@ class myApplication(QDialog):
         self.save_weights_enabled.stateChanged.connect(self.save_weights_changed)
         self.create_control_layout()
 
+    def use_static_model(self, value):
+        self.number_o_hidden_layers.setDisabled(value)
+        self.create_network_controls(2)
+
+
     def create_control_layout(self):
         layout = QGridLayout()
         layout.addWidget(self.learn_rate_label, 0, 0)
@@ -224,9 +235,10 @@ class myApplication(QDialog):
         layout.addWidget(self.report_interval, 7, 1)
         layout.addWidget(self.number_o_layers_label, 8, 0)
         layout.addWidget(self.number_o_hidden_layers, 8, 1)
+        layout.addWidget(self.use_static, 9, 1)
         self.network_layout = QGridLayout()
-        self.create_network_controls()
-        layout.addLayout(self.network_layout, 9, 0, 1, -1)
+        self.create_network_controls(2)
+        layout.addLayout(self.network_layout, 10, 0, 1, -1)
         layout.addWidget(self.memory_size_label, 11, 0)
         layout.addWidget(self.memory_size, 11, 1)
         layout.addWidget(self.batch_size_label, 12, 0)
@@ -257,17 +269,16 @@ class myApplication(QDialog):
         self.controlGroup.setLayout(self.group_layout)
 
 
-    def create_network_controls(self):
-        if (self.number_o_hidden_layers.text() == '' or self.number_o_hidden_layers.text() is None):
-            for i in range(self.network_layout.count()):
-                tmp = self.network_layout.itemAt(0).widget()
-                tmp.hide()
-                self.network_layout.removeWidget(tmp)
-                del tmp
-            self.hidden_layers = []
-            self.network_layout.update()
-            return
-        number = int(self.number_o_hidden_layers.text())
+    def create_network_controls(self, number):
+        # if (self.number_o_hidden_layers.text() == '' or self.number_o_hidden_layers.text() is None):
+        #     for i in range(self.network_layout.count()):
+        #         tmp = self.network_layout.itemAt(0).widget()
+        #         tmp.hide()
+        #         self.network_layout.removeWidget(tmp)
+        #         del tmp
+        #     self.hidden_layers = []
+        #     self.network_layout.update()
+        #     return
         hidden_layers = []
         for i in range(self.network_layout.count()):
             tmp = self.network_layout.itemAt(0).widget()
@@ -591,7 +602,7 @@ class myApplication(QDialog):
         layout.addWidget(mean,100,1)
         group = QGroupBox(str(index_database))
         group.setLayout(layout)
-        group.setFixedHeight(250)
+        group.setFixedHeight(30* index + 1)
         self.display_controls_layout.addWidget(group,0)
 
     def on_display_in_chart(self,index,field):
@@ -780,11 +791,16 @@ class RefreshDeamon(QThread):
 
 if __name__ == "__main__":
     import sys
-    logging.basicConfig(filename='log.txt', level=logging.DEBUG)
+    import Logger as lg
+
+    lsg = lg.logger()
+    # logging.basicConfig(filename='log.txt', level=logging.DEBUG)
     try:
         app = QApplication(sys.argv)
         myApp = myApplication()
         myApplication.show(myApp)
         sys.exit(app.exec_())
     except Exception as e:
-        logging.error(e,exc_info=True)
+        lsg.log.error("Chyba!" + str(e) + "\n")
+        lsg.log.error(e, exc_info=True)
+        # logging.error(e,exc_info=True)

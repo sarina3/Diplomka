@@ -6,8 +6,10 @@ from Neural_network import NeuralNetwork
 from Memory import ExperienceReplay
 from Statistics import Statistics
 import random
-import gym
+# import gym
 import time
+from envs import TimeLimit
+from envs import LunarLander
 
 # learn_rate = 0.001
 # num_o_ep = 20000
@@ -37,8 +39,9 @@ class Agent(object):
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         print(config)
         seed = 23
-
-        self.env = gym.make('LunarLander-v2')
+        game = LunarLander.LunarLander()
+        max_steps = 1000
+        self.env = TimeLimit.TimeLimit(game,max_episode_steps=max_steps)
         self.env.seed(seed)
         random.seed(seed)
         torch.manual_seed(seed)
